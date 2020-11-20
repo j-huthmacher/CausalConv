@@ -1,2 +1,2 @@
 # CausalConv
-Implementatio of a causal convolution network. 
+Implementation of a causal convolution network. 
