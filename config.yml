@@ -1,0 +1,23 @@
+train:
+  data: 
+    name: eeg-eye-state
+    lim: 5000
+  causal_conv:
+    c_in: 14
+    c_out: [32, 128, 16, 8]
+    seq_length: 100
+    model_cfg:
+      kernel_size: 32
+  mlp:
+    in_dim: 8
+    hidden_layers: [32, 256, 256]
+  loader:
+    batch_size: 32
+  n_epochs: 200
+  optimizer: Adam
+  optimizer_cfg:
+    lr: 0.0001
+    weight_decay: 0.001
+  grad_clipping: 1
+  plot: True
+    
