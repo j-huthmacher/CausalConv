@@ -24,7 +24,7 @@ class CausalConvNet(nn.Module):
 
             Parameters:
         """
-        super(CausalConvNet, self).__init__()
+        super().__init__()
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         # Set default values
@@ -40,14 +40,15 @@ class CausalConvNet(nn.Module):
         # Calculate dynamic attributes.
         self.initial_padding = (self.kernel_size - 1)
 
-        self.layers = []
+        self.layers = [nn.BatchNorm1d(c_in).float().to(self.device)]
         self.final_dim = None        
 
+
         # Stacking causal conv layers together!
-        for i, curr_out in enumerate(c_out):
+        for i, curr_out in enumerate(c_out[:-1] if len(c_out) > 1 else c_out):
             dilation_size = 2 ** i
 
-            causal_c_in =  (c_in if i == 0 else out_channels)
+            causal_c_in =  (c_in if i == 0 else c_out[i - 1])
             causal_c_out = curr_out
 
             causal_cfg = {
@@ -60,7 +61,7 @@ class CausalConvNet(nn.Module):
             }
 
             self.layers += [CausalLayer(causal_c_in, causal_c_out, causal_cfg,
-                                        weights = weights, activation=activation)]
+                                        weights=weights, activation=activation)]
 
             if i == 0:
                 self.final_dim = self.layers[-1].get_output_shape(seq_length)
@@ -69,22 +70,23 @@ class CausalConvNet(nn.Module):
         
         self.conv_net = nn.Sequential(*self.layers).to(self.device)
 
+        self.layers = [nn.Linear(self.final_dim * curr_out, c_out[-1])]
+
         #################
         # Linear Layers #
         #################
         if hasattr(self, 'linear_layers'):
-            self.layers = []
 
             for i, dim in enumerate(self.linear_layers):
                 if i == 0:
-                    self.layers += [nn.Linear(self.final_dim * curr_out, dim), nn.LeakyReLU()]
+                    self.layers += [nn.Linear(self.final_dim * c_out[i - 1], dim), nn.LeakyReLU()]
                 else:
                     self.layers += [nn.Linear(self.linear_layers[i-1], dim), nn.LeakyReLU()]
 
                 if hasattr(self, 'batch_norm') and self.batch_norm:
                     self.layers += [nn.BatchNorm1d(dim)]
-            
-            self.linear_net = nn.Sequential(*self.layers).to(self.device)
+                    
+        self.linear_net = nn.Sequential(*self.layers).to(self.device)
 
 
     # pylint: disable=arguments-differ
@@ -98,13 +100,20 @@ class CausalConvNet(nn.Module):
             Return:
                 torch.Tensor: Result of the forward pass.
         """
+        if not isinstance(x, torch.Tensor):
+            x = torch.tensor(x, dtype=torch.float64)
+
+
+        x = x.type("torch.FloatTensor").to(self.device)
 
         x = self.conv_net(x)
         x = x.view(x.size(0), -1)
-        x = self.linear_net(x)
+        
+        if hasattr(self, 'linear_net'):
+            x = self.linear_net(x)
 
         return x
-    
+
     def __repr__(self):
         """ String representation.
         """
@@ -130,6 +139,7 @@ class CausalConvNet(nn.Module):
     def paramters(self):
         return f"Parameters {sum(p.numel() for p in self.parameters())}"
 
+
 class RemoveTrail(nn.Module):
     """ This neural network component removes the trail (caused by padding)
         after a convolutional operation.
@@ -147,7 +157,7 @@ class RemoveTrail(nn.Module):
                 trail_size: int
                     Number positions (here features) that we cut of.
         """
-        super(RemoveTrail, self).__init__()
+        super().__init__()
         self.trail_size = trail_size
 
     # pylint: disable=arguments-differ
@@ -179,7 +189,7 @@ class CausalLayer(nn.Module):
 
             Parameters:
         """
-        super(CausalLayer, self).__init__()
+        super().__init__()
 
         # Default values
         self.dropout = 0.5
@@ -193,21 +203,21 @@ class CausalLayer(nn.Module):
 
         # Responsible for the causality in the convolution
         if isinstance(self.kernel_size, tuple):
-            dila_padding = (self.kernel_size[1] - 1) * self.dilation
+            self.dila_padding = (self.kernel_size[1] - 1) * self.dilation
         else:
-            dila_padding = (self.kernel_size - 1) * self.dilation
+            self.dila_padding = (self.kernel_size - 1) * self.dilation
 
         # Causal convolution, because of adapted padding!
         self.conv1 = nn.Conv1d(c_in,
                                c_out,
                                kernel_size=self.kernel_size,
                                stride=self.stride,
-                               padding=dila_padding,
+                               padding=self.dila_padding,
                                dilation=self.dilation,
                                bias=False)
 
         # Remove trailling padding
-        self.remove_trail = RemoveTrail(dila_padding)
+        self.remove_trail = RemoveTrail(self.dila_padding)
 
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(self.dropout)
@@ -243,14 +253,15 @@ class CausalLayer(nn.Module):
                 int: Dimension of the output of this layer.
         """
         # Output dim after convolutional operation
-        conv_out_shape = ((input_size - self.kernel_size +
-                           (2 * self.padding)) // self.stride) + 1
+
+        out = math.floor((((input_size + (2 * self.dila_padding) - (self.dilation * (self.kernel_size - 1))) - 1) / self.stride) + 1)
+        # conv_out_shape = ((input_size - self.kernel_size + (2 * self.padding)) // self.stride) + 1
         # Subtract the cutted of trail
-        conv_out_shape -= self.padding
+        out -= self.dila_padding
         # Output dim after max pooling
-        # final_output = math.floor(((conv_out_shape - self.kernel_size) //
-        #                            self.stride) + 1)
-        return conv_out_shape
+        if self.downsample is not None and not self.test:
+            out = math.floor(((out - self.kernel_size) / self.stride) + 1)
+        return out
 
     def init_weights(self):
         """ Initialization of the weights.
@@ -275,10 +286,13 @@ class CausalLayer(nn.Module):
                 torch.Tensor: returns the result of the causal layer.
         """
 
+        x = x.type("torch.FloatTensor").to(self.device)
+
         x = self.remove_trail(self.conv1(x))
 
         if not self.test:
             x = self.dropout(self.relu(x))
             x = x if self.downsample is None else self.downsample(x)
             x = self.relu(x)
+
         return x 
