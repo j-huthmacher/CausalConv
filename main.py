@@ -89,6 +89,7 @@ val_label = np.array([])
 
 
 #### Training ####
+torch.manual_seed(0)
 loss_fn = nn.CrossEntropyLoss()
 optimizer = getattr(optim, config["optimizer"])(list(model.parameters()) + list(classifier.parameters()),
                                                 **config["optimizer_cfg"])
@@ -126,7 +127,7 @@ try:
         #### Validation #####
         with torch.no_grad():
             model.eval()
-            for batch_x, batch_y in train_loader:
+            for batch_x, batch_y in val_loader:
                 yhat = model(batch_x)
                 loss = loss_fn(yhat, batch_y.type("torch.LongTensor").to(model.device))
 
@@ -149,7 +150,7 @@ try:
             fig = eval_plot(x, y, model, classifier, 
                             {"train loss": train_loss, "val loss": val_loss},
                             {"train acc": train_metrics, "val acc": val_metrics},
-                            n_epochs=config["n_epochs"], prec=5e-4,model_name="CausalConv - MLP Classifier")
+                            n_epochs=config["n_epochs"], prec=5e-4, model_name="CausalConv - MLP Classifier")
             plt.close()
             create_gif(fig, path=output+"CausalConv.Train.Val.gif", fill=config["n_epochs"] -1 != epoch)
 
@@ -159,6 +160,8 @@ try:
     np.save(f'{output}/CuasalConv_train_metrics.npy', train_metrics)
     with open(f'{output}/config.yml', 'w') as outfile:
         yaml.dump(config, outfile, default_flow_style=False)
+    torch.save(model, f'{output}/encoder.pt')
+    torch.save(classifier, f'{output}/classifier.pt')
 
 except Exception as e:
     print(e)
