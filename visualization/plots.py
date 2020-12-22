@@ -3,6 +3,8 @@
     @author: j-huthmacher
 """
 import io
+import matplotlib as mpl
+
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 from PIL import Image
@@ -13,7 +15,10 @@ import numpy as np
 import torch
 from torch import nn
 from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
 
+
+mpl.use('Agg')
 plt.style.use('seaborn')
 
 # Needed to collect figures per frame and merge them afterwards to a gif.
@@ -225,8 +230,10 @@ def class_contour(x: np.array, y: np.array, clf: nn.Module, prec: float = 0.05,
 
         ax.contourf(xx, yy, Z, alpha=0.8, cmap=sns.color_palette("Spectral", as_cmap=True))
     except:
-        mode = " - TSNE"
-        x = TSNE(n_components=2).fit_transform(x)
+        # mode = " - TSNE"
+        # x = TSNE(n_components=2).fit_transform(x)
+        mode = " - PCA"
+        x = PCA(n_components=2).fit_transform(x)
 
 
     ax.scatter(x[:, 0], x[:, 1], c=y.astype(int), cmap=sns.color_palette("Spectral", as_cmap=True), edgecolors='w')
