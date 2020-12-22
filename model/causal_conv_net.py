@@ -40,7 +40,7 @@ class CausalConvNet(nn.Module):
         # Calculate dynamic attributes.
         self.initial_padding = (self.kernel_size - 1)
 
-        self.layers = [nn.BatchNorm1d(c_in).float().to(self.device)]
+        self.layers = []
         self.final_dim = None        
 
 
@@ -60,7 +60,7 @@ class CausalConvNet(nn.Module):
                 "test": self.test  # Testing purpose? I.e. ignore activation etc.
             }
 
-            self.layers += [CausalLayer(causal_c_in, causal_c_out, causal_cfg,
+            self.layers += [nn.BatchNorm1d(causal_c_in).float().to(self.device), CausalLayer(causal_c_in, causal_c_out, causal_cfg,
                                         weights=weights, activation=activation)]
 
             if i == 0:
