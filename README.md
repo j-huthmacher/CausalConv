@@ -3,6 +3,7 @@ Implementation of a Causal Convolutional Network (also called TCN). This impleme
 
 ## Usage
 
+## Use Case: Eye State Classification based on EEG Data
 
 
 ## Idea of the CausalConv
