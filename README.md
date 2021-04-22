@@ -23,7 +23,7 @@ Figure 2: In this example we have again a "standard" 1D convolution. However, he
 
 To get for each time stamp a prediction (=output) and make sure that a prediction only depends on the past we can use paddings as shown below.
 
-![Standard1DCausalConv.gif](./assets/Standard1DCausalConv.gif)
+![Standard1DCausalConv.gif](./assets/Standard1DCausalConv____.gif)
 
 Figure 3: Causal convolution.
 
